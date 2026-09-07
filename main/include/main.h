@@ -8,10 +8,17 @@
 #ifndef MAIN_INCLUDE_MAIN_H_
 #define MAIN_INCLUDE_MAIN_H_
 
-#pragma once
 #include <stdint.h>
 
-// Struct konfigurasi pin BSP (Board Support Package)
+#pragma once
+
+#define WIFI_SSID_DEFAULT           "Nama_WiFi_Anda"
+#define WIFI_PASS_DEFAULT           "Password_WiFi_Anda"
+#define MQTT_BROKER_URI_DEFAULT     "mqtt://broker.emqx.io:1883" // atau broker lokal / HiveMQ
+#define MQTT_CLIENT_ID_DEFAULT      "ESP32_Node_01"
+#define MQTT_TOPIC_REQ_DEFAULT      "esp32/node1/request"
+#define MQTT_TOPIC_RESP_DEFAULT     "esp32/node1/response"
+
 typedef struct {
     int sda;
     int scl;

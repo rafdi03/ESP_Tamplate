@@ -4,6 +4,7 @@
  *  Created on: 4 Sept 2026
  *      Author: Rafdi
  */
+
 #include "LCD.h"
 #include <string.h>
 #include "driver/i2c_master.h"
@@ -64,8 +65,10 @@ void lcd_send_string(const char *str) {
 }
 
 esp_err_t lcd_init(const lcd_config_t *config) {
+    lcd_config_t default_cfg;
     if (config == NULL) {
-        return ESP_ERR_INVALID_ARG;
+        default_cfg = LCD_CONFIG_DEFAULT();
+        config = &default_cfg;
     }
 	
     i2c_master_bus_config_t bus_config = {
@@ -83,12 +86,12 @@ esp_err_t lcd_init(const lcd_config_t *config) {
     }
 
     // 2. Tambahkan device LCD ke bus
-    i2c_device_config_t dev_config = {
+    i2c_device_config_t dev_cfg = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = config->i2c_addr,
         .scl_speed_hz = 100000,
     };
-    ret = i2c_master_bus_add_device(s_lcd_bus_handle, &dev_config, &s_lcd_dev_handle);
+    ret = i2c_master_bus_add_device(s_lcd_bus_handle, &dev_cfg, &s_lcd_dev_handle);
     if (ret != ESP_OK) {
         return ret;
     }
@@ -109,4 +112,12 @@ esp_err_t lcd_init(const lcd_config_t *config) {
     lcd_send_cmd(0x0C); // Display ON, kursor OFF
 
     return ESP_OK;
+}
+
+esp_err_t lcd_init_pins(bsp_i2c_pins_t pins) {
+    lcd_config_t cfg = {
+        .pins = pins,
+        .i2c_addr = LCD_DEFAULT_ADDR,
+    };
+    return lcd_init(&cfg);
 }

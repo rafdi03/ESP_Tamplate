@@ -7,20 +7,29 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_task_wdt.h"
+#include "esp_system.h"
+#include "esp_log.h"
 #include "Scheduler.h"
 #include "task.h"
-#include "esp_task_wdt.h"
+#include "ringbuff_com.h"
 
+static const char *TAG = "SCHEDULER";
 
-esp_task_wdt_config_t twdt_config = {
-    .timeout_ms = 3000,             
-    .idle_core_mask = (1 << 0) | (1 << 1), 
-    .trigger_panic = true            
-};
-esp_task_wdt_config_t(twdt_config);
+static void init_task_watchdog(void) {
+    esp_task_wdt_config_t twdt_config = {
+        .timeout_ms = 3000,
+        .idle_core_mask = (1 << 0) | (1 << 1),
+        .trigger_panic = true 
+    };
+
+    if (esp_task_wdt_reconfigure(&twdt_config) != ESP_OK) {
+        esp_task_wdt_init(&twdt_config);
+    }
+}
 
 static void vTaskPriority5(void *pvParameters) {
-	esp_task_wdt_add(NULL);
+    esp_task_wdt_add(NULL);
     TickType_t xLastWakeTime = xTaskGetTickCount();
     uint32_t counter_1ms = 0;
 
@@ -30,12 +39,14 @@ static void vTaskPriority5(void *pvParameters) {
             job_5ms();
             counter_1ms = 0;
         }
-		esp_task_wdt_reset();
+
+        esp_task_wdt_reset();
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1));
     }
 }
 
 static void vTaskPriority4(void *pvParameters) {
+	esp_task_wdt_add(NULL);
     TickType_t xLastWakeTime = xTaskGetTickCount();
     uint32_t counter_5ms = 0;
 
@@ -58,10 +69,12 @@ static void vTaskPriority4(void *pvParameters) {
         if (counter_5ms >= 60) {
             counter_5ms = 0;
         }
+		esp_task_wdt_reset();
     }
 }
 
 static void vTaskPriority3(void *pvParameters) {
+	esp_task_wdt_add(NULL);
     TickType_t xLastWakeTime = xTaskGetTickCount();
     uint32_t counter_50ms = 0;
 
@@ -75,10 +88,12 @@ static void vTaskPriority3(void *pvParameters) {
             job_100ms();
             counter_50ms = 0;
         }
+		esp_task_wdt_reset();
     }
 }
 
 static void vTaskPriority2(void *pvParameters) {
+	esp_task_wdt_add(NULL);
     TickType_t xLastWakeTime = xTaskGetTickCount();
     uint32_t counter_100ms = 0;
 
@@ -101,15 +116,19 @@ static void vTaskPriority2(void *pvParameters) {
         if (counter_100ms >= 30) {
             counter_100ms = 0;
         }
+		esp_task_wdt_reset();
     }
 }
 
 static void vTaskPriority1(void *pvParameters) {
+    esp_task_wdt_add(NULL);
     TickType_t xLastWakeTime = xTaskGetTickCount();
 
     while (1) {
-        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1000));
         job_1000ms();
+
+        esp_task_wdt_reset();
+        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1000));
     }
 }
 
@@ -119,7 +138,8 @@ void init_scheduler(const scheduler_config_t *config) {
         cfg = SCHEDULER_CONFIG_ALL_ENABLE();
         config = &cfg;
     }
-
+    init_task_watchdog();
+    ringbuf_com_init(RINGBUF_COMM_DEFAULT_SIZE);
     startup_application();
 
     if (config->enable_prio_5_fast) {

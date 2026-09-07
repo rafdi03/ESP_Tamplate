@@ -11,7 +11,11 @@
 #include <stdint.h>
 #include "LCD.h"
 #include "IMU_MPU.h"
+#include "ringbuff_com.h"
+#include "Com.h"
+#include "com_templates.h"
 #include "esp_timer.h"
+#include "driver/gpio.h"
 #include "esp_intr_alloc.h"
 #include "esp_attr.h"
 
@@ -31,56 +35,65 @@ void execute_int_callback(void) {
 }
 
 void startup_application(void) {
-
+    com_init(); 
+    com_templates_register_all_handlers(); 
+//	com_tmpl_wifi_http_init(WIFI_SSID_DEFAULT, WIFI_PASS_DEFAULT);
+//	com_tmpl_mqtt_init(MQTT_BROKER_URI_DEFAULT, MQTT_CLIENT_ID_DEFAULT);
 }
 
 void job_1ms(void) {
-  
+    com_update_1ms(); 
 }
 
 void job_5ms(void) {
-   
+
 }
 
 void job_10ms(void) {
-   
+
 }
 
 void job_15ms(void) {
- 
+
 }
 
 void job_20ms(void) {
-
+	
 }
 
+
 void job_50ms(void) {
-    
+
 }
 
 void job_100ms(void) {
-   
+    
 }
 
 void job_200ms(void) {
-
+	
 }
 
 void job_300ms(void) {
-  
+ 
 }
 
 void job_500ms(void) {
-   
+  
 }
 
 void job_1000ms(void) {
+    ringbuf_com_print_stats();
 }
 
-#if 0
+#if 0 
 static void IRAM_ATTR isr_level_1_3_handler(void* arg) {
     uint32_t gpio_num = (uint32_t) arg;
-
+    
+    // Contoh mengirim event dari ISR ke RingBuffer secara aman:
+    // BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    // ringbuf_com_send_from_isr(&gpio_num, sizeof(gpio_num), &xHigherPriorityTaskWoken);
+    // if (xHigherPriorityTaskWoken) portYIELD_FROM_ISR();
 }
 
 void init_interrupt_level_1_3(gpio_num_t gpio_pin, gpio_int_type_t intr_type) {
@@ -99,7 +112,7 @@ void init_interrupt_level_1_3(gpio_num_t gpio_pin, gpio_int_type_t intr_type) {
 
 #if 0
 static void IRAM_ATTR isr_level_4_5_handler(void* arg) {
-
+    // Logika Hard Real-Time
 }
 
 void init_interrupt_level_4_5(gpio_num_t gpio_pin) {

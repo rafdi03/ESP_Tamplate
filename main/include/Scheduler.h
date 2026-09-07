@@ -10,6 +10,8 @@
 
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 // Struct konfigurasi aktivasi Task per Priority
 typedef struct {
@@ -30,7 +32,7 @@ typedef struct {
 })
 
 /**
- * @brief Inisialisasi dan jalankan scheduler FreeRTOS.
+ * @brief Inisialisasi dan jalankan scheduler FreeRTOS serta subsistem komunikasi.
  * @param config Pointer ke konfigurasi aktivasi task (jika NULL, otomatis mengaktifkan semua).
  */
 void init_scheduler(const scheduler_config_t *config);
