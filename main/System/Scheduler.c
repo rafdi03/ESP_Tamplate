@@ -14,7 +14,7 @@
 #include "task.h"
 #include "ringbuff_com.h"
 
-static const char *TAG = "SCHEDULER";
+static const char *TAG __attribute__((unused)) = "SCHEDULER";
 
 static void init_task_watchdog(void) {
     esp_task_wdt_config_t twdt_config = {

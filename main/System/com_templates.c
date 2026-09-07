@@ -17,10 +17,17 @@
 #include "com_templates.h"
 #include "esp_log.h"
 #include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "nvs_flash.h"
 #include "esp_netif.h"
+#include "driver/gpio.h"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcpp"
+#include "driver/twai.h"
+#pragma GCC diagnostic pop
 
 static const char *TAG = "COM_TEMPLATES";
 
@@ -192,23 +199,19 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
  * @retval ESP_OK jika WiFi stack dan HTTP server berhasil dijalankan, atau esp_err_t jika gagal.
  */
 esp_err_t com_tmpl_wifi_http_init(const char *ssid, const char *pass) {
-    // 1. Inisialisasi NVS Flash (Wajib untuk WiFi ESP32)
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         nvs_flash_erase();
         nvs_flash_init();
     }
 
-    // 2. Inisialisasi Network Interface & Default Event Loop
     esp_netif_init();
     esp_event_loop_create_default();
     esp_netif_create_default_wifi_sta();
 
-    // 3. Inisialisasi WiFi Driver
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     esp_wifi_init(&cfg);
 
-    // 4. Daftarkan event handler WiFi dan IP
     esp_event_handler_instance_register(WIFI_EVENT,
                                         ESP_EVENT_ANY_ID,
                                         &wifi_event_handler,
@@ -221,7 +224,6 @@ esp_err_t com_tmpl_wifi_http_init(const char *ssid, const char *pass) {
                                         NULL,
                                         NULL);
 
-    // 5. Masukkan SSID dan Password (Terima semua jenis enkripsi router & All Channel Scan)
     wifi_config_t wifi_config = {
         .sta = {
             .scan_method = WIFI_ALL_CHANNEL_SCAN,
@@ -232,7 +234,6 @@ esp_err_t com_tmpl_wifi_http_init(const char *ssid, const char *pass) {
     strncpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
     strncpy((char *)wifi_config.sta.password, pass, sizeof(wifi_config.sta.password));
 
-    // 6. Set Mode Station dan Jalankan
     esp_wifi_set_mode(WIFI_MODE_STA);
     esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
     esp_wifi_start();
@@ -318,8 +319,31 @@ void com_tmpl_mqtt_on_message_received(const char *topic, const uint8_t *payload
  * @retval ESP_OK jika inisialisasi driver TWAI berhasil, atau esp_err_t jika gagal.
  */
 esp_err_t com_tmpl_can_init(int tx_pin, int rx_pin, uint32_t baud_rate_kbps) {
-    ESP_LOGI(TAG, "[CAN Bus Template] Init TWAI TX: %d, RX: %d @ %lu kbps", tx_pin, rx_pin, (unsigned long)baud_rate_kbps);
-    return ESP_OK;
+	twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
+	        (gpio_num_t)tx_pin, 
+	        (gpio_num_t)rx_pin, 
+	        TWAI_MODE_NORMAL
+	    );
+	    twai_timing_config_t t_config;
+	    switch (baud_rate_kbps) {
+	        case 125:  t_config = (twai_timing_config_t)TWAI_TIMING_CONFIG_125KBITS(); break;
+	        case 250:  t_config = (twai_timing_config_t)TWAI_TIMING_CONFIG_250KBITS(); break;
+	        case 1000: t_config = (twai_timing_config_t)TWAI_TIMING_CONFIG_1MBITS(); break;
+	        case 500:
+	        default:   t_config = (twai_timing_config_t)TWAI_TIMING_CONFIG_500KBITS(); break;
+	    }
+	    twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+	    esp_err_t ret = twai_driver_install(&g_config, &t_config, &f_config);
+	    if (ret != ESP_OK) {
+	        ESP_LOGE(TAG, "Gagal menginstall CAN/TWAI driver!");
+	        return ret;
+	    }
+	    ret = twai_start();
+	    if (ret == ESP_OK) {
+	        ESP_LOGI(TAG, "CAN Bus (TWAI) Aktif @ %lu kbps pada TX:%d, RX:%d", (unsigned long)baud_rate_kbps, tx_pin, rx_pin);
+	    }
+	    return ret;
+	
 }
 
 /**
@@ -329,8 +353,14 @@ esp_err_t com_tmpl_can_init(int tx_pin, int rx_pin, uint32_t baud_rate_kbps) {
  * @retval ESP_OK jika transmisi frame berhasil di-enqueue, atau esp_err_t jika gagal.
  */
 esp_err_t com_tmpl_can_send_frame(const void *data, size_t len) {
-    ESP_LOGI(TAG, "[CAN Bus TX] Transmit CAN Frame (%u bytes)", (unsigned int)len);
-    return ESP_OK;
+	if (data == NULL || len == 0) return ESP_ERR_INVALID_ARG;
+	    twai_message_t tx_msg = {
+	        .identifier = 0x123,           
+	        .extd = 0,                 
+	        .data_length_code = (len > 8) ? 8 : len,
+	    };
+	    memcpy(tx_msg.data, data, tx_msg.data_length_code);
+	    return twai_transmit(&tx_msg, pdMS_TO_TICKS(10));
 }
 
 /**
@@ -353,6 +383,18 @@ void com_tmpl_can_on_frame_received(uint32_t can_id, const uint8_t *data, uint8_
     req.crc16 = comm_crc16(&req, offsetof(com_inbound_req_t, crc16));
 
     com_push_incoming_request(COM_IF_CAN, &req, sizeof(req));
+}
+
+/**
+ * @brief  Melakukan polling non-blocking frame masuk dari antrean hardware CAN Bus / TWAI.
+ * @param  None
+ * @retval None
+ */
+void can_rx_poll(void) {
+    twai_message_t rx_msg;
+    while (twai_receive(&rx_msg, 0) == ESP_OK) {
+        com_tmpl_can_on_frame_received(rx_msg.identifier, rx_msg.data, rx_msg.data_length_code);
+    }
 }
 
 /* =========================================================================

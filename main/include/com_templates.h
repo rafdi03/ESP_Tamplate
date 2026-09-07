@@ -202,6 +202,7 @@ esp_err_t com_tmpl_can_send_frame(const void *data, size_t len);
  * @retval None
  */
 void com_tmpl_can_on_frame_received(uint32_t can_id, const uint8_t *data, uint8_t dlc);
+void can_rx_poll(void);
 
 /* =========================================================================
  * 7. TEMPLATE BLE (Bluetooth Low Energy GATT)

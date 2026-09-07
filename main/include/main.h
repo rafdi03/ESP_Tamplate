@@ -36,10 +36,16 @@ typedef struct {
     int rx;
 } bsp_uart_pins_t;
 
+typedef struct {
+    int tx;
+    int rx;
+} bsp_can_pins_t;
+
 #define I2C_PINS_LCD   ((bsp_i2c_pins_t){ .sda = 26, .scl = 25 })
 #define I2C_PINS_IMU   ((bsp_i2c_pins_t){ .sda = 14, .scl = 12 })
 
 #define UART_PINS_GPS  ((bsp_uart_pins_t){ .tx = 17, .rx = 16 })
 #define SPI_PINS_LORA  ((bsp_spi_pins_t){ .mosi = 23, .miso = 19, .sck = 18, .cs = 5 })
+#define CAN_PINS_DEFAULT ((bsp_can_pins_t){ .tx = 21, .rx = 22 })
 
 #endif /* MAIN_INCLUDE_MAIN_H_ */

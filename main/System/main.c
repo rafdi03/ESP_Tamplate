@@ -8,7 +8,7 @@
 #include "Scheduler.h"
 #include "esp_log.h"
 
-static const char *TAG = "MAIN";
+static const char *TAG __attribute__((unused)) = "MAIN";
 
 void app_main(void) {
     init_scheduler(NULL);

@@ -20,7 +20,7 @@
 #include "esp_intr_alloc.h"
 #include "esp_attr.h"
 
-static const char *TAG = "TASK_JOBS";
+static const char *TAG __attribute__((unused)) = "TASK_JOBS";
 
 // Callback function pointer internal
 static int_callback_t in_user_cb = NULL;
@@ -44,6 +44,7 @@ void startup_application(void) {
 
 void job_1ms(void) {
     com_update_1ms(); 
+	can_rx_poll();
 }
 
 void job_5ms(void) {
