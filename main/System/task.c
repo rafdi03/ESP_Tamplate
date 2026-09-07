@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include <stddef.h>
 #include <stdint.h>
+#include "main.h"
 #include "LCD.h"
 #include "IMU_MPU.h"
 #include "ringbuff_com.h"
@@ -85,6 +86,7 @@ void job_500ms(void) {
 void job_1000ms(void) {
     ringbuf_com_print_stats();
 }
+
 
 #if 0 
 static void IRAM_ATTR isr_level_1_3_handler(void* arg) {
