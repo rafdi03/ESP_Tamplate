@@ -48,4 +48,6 @@ typedef struct {
 #define SPI_PINS_LORA  ((bsp_spi_pins_t){ .mosi = 23, .miso = 19, .sck = 18, .cs = 5 })
 #define CAN_PINS_DEFAULT ((bsp_can_pins_t){ .tx = 21, .rx = 22 })
 
+
+
 #endif /* MAIN_INCLUDE_MAIN_H_ */

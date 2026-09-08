@@ -442,7 +442,7 @@ void com_tmpl_ble_on_characteristic_write(const uint8_t *data, size_t len) {
  * @retval None
  */
 void com_templates_register_all_handlers(void) {
-    com_register_tx_handler(COM_IF_UART, com_tmpl_uart_send);
+ //   com_register_tx_handler(COM_IF_UART, com_tmpl_uart_send);
 //    com_register_tx_handler(COM_IF_MODBUS, com_tmpl_modbus_send_response);
 //    com_register_tx_handler(COM_IF_LORA, com_tmpl_lora_send_packet);
 //    com_register_tx_handler(COM_IF_WIFI_HTTP, com_tmpl_http_send_response);
