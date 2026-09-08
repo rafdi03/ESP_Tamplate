@@ -654,6 +654,4 @@ void com_templates_register_all_handlers(void) {
     com_register_tx_handler(COM_IF_CAN, com_tmpl_can_send_frame);
     com_register_tx_handler(COM_IF_BLE, com_tmpl_ble_send_notify);
     com_register_tx_handler(COM_IF_ESPNOW, com_tmpl_espnow_send);
-
-    ESP_LOGI(TAG, "Seluruh 8 Communication Protocol TX Handlers berhasil didaftarkan ke Com Hub.");
 }
