@@ -232,11 +232,49 @@ esp_err_t com_tmpl_ble_send_notify(const void *data, size_t len);
 void com_tmpl_ble_on_characteristic_write(const uint8_t *data, size_t len);
 
 /* =========================================================================
+ * 8. TEMPLATE ESP-NOW (Two-Way Peer-to-Peer & Broadcast 2.4GHz)
+ * ========================================================================= */
+
+/**
+ * @brief  Inisialisasi stack ESP-NOW 2-Way communication (Master/Slave).
+ * @param  peer_mac Alamat 6-byte MAC target peer (atau NULL untuk broadcast FF:FF:FF:FF:FF:FF).
+ * @param  channel Channel Wi-Fi operasi (1 - 13, default 1).
+ * @retval ESP_OK jika inisialisasi ESP-NOW berhasil, atau esp_err_t jika gagal.
+ */
+esp_err_t com_tmpl_espnow_init(const uint8_t *peer_mac, uint8_t channel);
+
+/**
+ * @brief  Menambahkan peer baru ke daftar komunikasi ESP-NOW secara dinamis.
+ * @param  peer_mac Alamat 6-byte MAC target.
+ * @param  channel Channel Wi-Fi target.
+ * @param  encrypt Status enkripsi paket (true / false).
+ * @retval ESP_OK jika peer berhasil ditambahkan, atau esp_err_t jika gagal.
+ */
+esp_err_t com_tmpl_espnow_add_peer(const uint8_t *peer_mac, uint8_t channel, bool encrypt);
+
+/**
+ * @brief  Mengirimkan paket data biner melalui gelombang radio ESP-NOW (TX Handler).
+ * @param  data Pointer ke buffer data yang akan dikirimkan (maksimal 250 bytes).
+ * @param  len Panjang data yang akan dikirim dalam bytes.
+ * @retval ESP_OK jika paket berhasil dikirim ke antrean radio, atau esp_err_t jika gagal.
+ */
+esp_err_t com_tmpl_espnow_send(const void *data, size_t len);
+
+/**
+ * @brief  Callback penerimaan data masuk ESP-NOW dari perangkat peer/master lain ke Com Hub.
+ * @param  src_mac Pointer ke alamat MAC pengirim paket (6 bytes).
+ * @param  data Pointer ke payload data yang diterima.
+ * @param  len Panjang data payload dalam bytes.
+ * @retval None
+ */
+void com_tmpl_espnow_on_recv(const uint8_t *src_mac, const uint8_t *data, int len);
+
+/* =========================================================================
  * MASTER REGISTRATION HELPER
  * ========================================================================= */
 
 /**
- * @brief  Mendaftarkan seluruh callback pengiriman data (TX Handlers) dari 7 protokol ke Com Hub.
+ * @brief  Mendaftarkan seluruh callback pengiriman data (TX Handlers) protokol ke Com Hub.
  * @param  None
  * @retval None
  */

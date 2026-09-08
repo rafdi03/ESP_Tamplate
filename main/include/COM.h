@@ -15,7 +15,7 @@
 #include "esp_err.h"
 #include "ringbuff_com.h"
 
-// Definisi 7 Antarmuka Komunikasi Universal
+// Definisi 8 Antarmuka Komunikasi Universal
 typedef enum {
     COM_IF_UART = 0,    // UART (Serial PC / RS485 / Industrial Sensor)
     COM_IF_MODBUS,      // Modbus RTU (RS485) / Modbus TCP
@@ -24,6 +24,7 @@ typedef enum {
     COM_IF_MQTT,        // MQTT Broker Pub/Sub
     COM_IF_CAN,         // CAN Bus / TWAI Controller (Automotive)
     COM_IF_BLE,         // Bluetooth Low Energy GATT
+    COM_IF_ESPNOW,      // ESP-NOW 2.4GHz Ultra-Fast Wireless (Peer-to-Peer / Broadcast)
     COM_IF_MAX
 } com_interface_t;
 

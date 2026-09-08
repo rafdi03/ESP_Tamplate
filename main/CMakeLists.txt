@@ -1,3 +1,3 @@
-idf_component_register(SRCS "System/main.c" "System/Scheduler.c" "System/task.c" "input/LCD.c" "input/IMU_MPU.c" "System/ringbuff_com.c" "System/Com.c" "System/com_templates.c" "System/data_logger/data_logger.c" "System/data_logger/app_log.c" "System/data_logger/log_system.c"
-                       PRIV_REQUIRES spi_flash esp_driver_i2c esp_driver_gpio esp_driver_twai driver esp_timer esp_ringbuf esp_wifi nvs_flash esp_netif esp_event esp_partition
+idf_component_register(SRCS "System/main.c" "System/Scheduler.c" "System/task.c" "input/LCD.c" "input/IMU_MPU.c" "System/ringbuff_com.c" "System/Com.c" "System/com_templates.c" "System/data_logger/data_logger.c" "System/data_logger/app_log.c" "System/data_logger/log_system.c" "System/ota_update.c"
+                       PRIV_REQUIRES spi_flash esp_driver_i2c esp_driver_gpio esp_driver_twai driver esp_timer esp_ringbuf esp_wifi nvs_flash esp_netif esp_event esp_partition app_update esp_http_server
                        INCLUDE_DIRS "include" "System/data_logger")

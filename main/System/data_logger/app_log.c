@@ -130,13 +130,11 @@ esp_err_t app_log_pre_erase_check(uint64_t current_address) {
     uint32_t next_sector = current_sector + 1;
     uint32_t next_sector_addr = next_sector * sector_size;
 
-    // Pastikan sektor berikutnya masih dalam batas ukuran partisi
     if (next_sector_addr >= s_log_partition->size) {
         next_sector = 0; // Wrap around jika melingkar (circular logging)
         next_sector_addr = 0;
     }
 
-    // Jika sektor berikutnya belum pernah di-pre-erase
     if (s_last_pre_erased_sector != next_sector) {
         esp_err_t err = spi_flash_erase(next_sector_addr, sector_size);
         if (err == ESP_OK) {

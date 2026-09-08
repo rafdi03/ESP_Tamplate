@@ -19,6 +19,7 @@
 #include "driver/gpio.h"
 #include "esp_intr_alloc.h"
 #include "esp_attr.h"
+#include "data_logger.h"
 
 static const char *TAG __attribute__((unused)) = "TASK_JOBS";
 
@@ -38,7 +39,8 @@ void execute_int_callback(void) {
 void startup_application(void) {
     com_init(); 
     com_templates_register_all_handlers(); 
-//	com_tmpl_wifi_http_init(WIFI_SSID_DEFAULT, WIFI_PASS_DEFAULT);
+//	data_logger_init();
+	com_tmpl_wifi_http_init(WIFI_SSID_DEFAULT, WIFI_PASS_DEFAULT);
 //	com_tmpl_mqtt_init(MQTT_BROKER_URI_DEFAULT, MQTT_CLIENT_ID_DEFAULT);
 }
 

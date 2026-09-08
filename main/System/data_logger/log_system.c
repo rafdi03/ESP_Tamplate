@@ -56,11 +56,9 @@ static void log_writer_task(void *pvParameters) {
     ESP_LOGI(TAG, "Log Background Writer Task aktif pada Core %d.", xPortGetCoreID());
 
     while (1) {
-        // 1. Tertidur pulas menunggu sinyal Task Notification dari log_system_push_raw_record()
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
         if (s_backend && s_backend->write && s_flush_buf) {
-            // 2. Eksekusi penulisan fisik sektor penuh (4096 bytes) di latar belakang
             esp_err_t err = s_backend->write(s_current_write_address, s_flush_buf, LOG_SECTOR_SIZE);
             if (err == ESP_OK) {
                 ESP_LOGD(TAG, "Background Write sukses @ 0x%08llX", s_current_write_address);
@@ -70,18 +68,13 @@ static void log_writer_task(void *pvParameters) {
                     s_current_write_address = 0; // Wrap around jika melingkar
                 }
 
-                // 3. Eksekusi Pre-Erase Sektor N+1 di latar belakang
                 app_log_pre_erase_check(s_current_write_address);
             } else {
                 ESP_LOGE(TAG, "Gagal menulis sektor Flash @ 0x%08llX (Error: %d)", s_current_write_address, err);
             }
         }
-    }
+    } 
 }
-
-/* =========================================================================
- * FUNGSI INTERNAL HELPER & BOOT RECOVERY
- * ========================================================================= */
 
 /**
  * @brief  Menjalankan pemulihan sektor saat sistem booting (Boot Recovery).
@@ -104,13 +97,11 @@ static esp_err_t log_system_boot_recovery(void) {
         chunk_header_t header;
         chunk_footer_t footer;
 
-        // 1. Baca Header dan Footer sektor
         if (s_backend->read(addr, &header, sizeof(header)) != ESP_OK) continue;
         if (s_backend->read(addr + LOG_SECTOR_SIZE - sizeof(footer), &footer, sizeof(footer)) != ESP_OK) continue;
 
-        // 2. Validasi Magic Start dan Magic End
         if (header.magic_start == DATALOG_CHUNK_MAGIC && footer.magic_end == DATALOG_CHUNK_END_MAGIC) {
-            // 3. Baca seluruh sektor untuk validasi checksum CRC32
+
             if (s_backend->read(addr, temp_sector, LOG_SECTOR_SIZE) == ESP_OK) {
                 uint32_t data_len = LOG_SECTOR_SIZE - sizeof(chunk_footer_t);
                 uint32_t calc_crc = esp_rom_crc32_le(0, temp_sector, data_len);
@@ -140,13 +131,12 @@ static esp_err_t log_system_boot_recovery(void) {
         s_current_sequence = 1;
         s_current_write_address = 0;
         ESP_LOGI(TAG, "Tidak ada data log lama (Storage baru/bersih). Memulai dari Sequence 1 @ 0x00000000.");
-        // Erase sektor 0 pertama kali
+
         if (s_backend->erase) {
             s_backend->erase(0, LOG_SECTOR_SIZE);
         }
     }
 
-    // Pastikan sektor berikutnya disiapkan dengan Pre-Erase
     app_log_pre_erase_check(s_current_write_address);
     return ESP_OK;
 }
@@ -158,7 +148,6 @@ static esp_err_t log_system_boot_recovery(void) {
 static void log_system_swap_and_notify_worker_locked(size_t record_len) {
     if (s_active_record_count == 0) return;
 
-    // 1. Pasang Chunk Header di awal sektor
     chunk_header_t *header = (chunk_header_t *)s_active_buf;
     header->magic_start      = DATALOG_CHUNK_MAGIC;
     header->sequence_num     = s_current_sequence++;
@@ -166,28 +155,23 @@ static void log_system_swap_and_notify_worker_locked(size_t record_len) {
     header->record_size      = record_len;
     header->timestamp_start  = s_active_timestamp_start;
 
-    // 2. Padding sisa ruang dengan 0xFF (standar unwritten Flash NOR)
     size_t data_payload_limit = LOG_SECTOR_SIZE - sizeof(chunk_footer_t);
     if (s_active_offset < data_payload_limit) {
         memset(s_active_buf + s_active_offset, 0xFF, data_payload_limit - s_active_offset);
     }
 
-    // 3. Hitung Hardware ROM CRC32 untuk seluruh isi sektor sebelum footer
     uint32_t calc_crc = esp_rom_crc32_le(0, s_active_buf, data_payload_limit);
 
-    // 4. Pasang Chunk Footer di akhir sektor
     chunk_footer_t *footer = (chunk_footer_t *)(s_active_buf + data_payload_limit);
     footer->crc32     = calc_crc;
     footer->magic_end = DATALOG_CHUNK_END_MAGIC;
 
-    // 5. Swap Ping-Pong Buffers secara instan (< 1 mikrosekon)
     s_flush_buf  = s_active_buf;
     s_active_buf = (s_active_buf == s_buffer_a) ? s_buffer_b : s_buffer_a;
     s_active_offset          = sizeof(chunk_header_t);
     s_active_record_count    = 0;
     s_active_timestamp_start = 0;
 
-    // 6. Berikan sinyal notifikasi OS ke Task Pekerja di Core 0 (Non-blocking)
     if (s_log_writer_task_handle != NULL) {
         xTaskNotifyGive(s_log_writer_task_handle);
     }
@@ -222,17 +206,14 @@ esp_err_t log_system_init(void) {
         s_total_storage_size = info.total_size;
     }
 
-    // Reset buffer pointers
     s_active_buf             = s_buffer_a;
     s_flush_buf              = s_buffer_b;
     s_active_offset          = sizeof(chunk_header_t);
     s_active_record_count    = 0;
     s_active_timestamp_start = 0;
 
-    // Jalankan Boot Recovery
     log_system_boot_recovery();
 
-    // Buat Task Background Writer terisolasi di Core 0 (Priority 2)
     if (s_log_writer_task_handle == NULL) {
         BaseType_t res = xTaskCreatePinnedToCore(
             log_writer_task,
@@ -263,23 +244,19 @@ esp_err_t log_system_push_raw_record(const void *record, size_t record_len) {
 
     size_t data_payload_limit = LOG_SECTOR_SIZE - sizeof(chunk_footer_t);
 
-    // Jika buffer aktif penuh, swap buffer & bangunkan task di Core 0 (Non-blocking)
     if (s_active_offset + record_len > data_payload_limit) {
         log_system_swap_and_notify_worker_locked(record_len);
     }
 
-    // Catat timestamp sample awal pada blok ini jika baru
     if (s_active_record_count == 0) {
         const device_datalog_t *sample = (const device_datalog_t *)record;
         s_active_timestamp_start = (uint32_t)(sample->timestamp * 1000.0f);
     }
 
-    // Masukkan record ke dalam active RAM buffer (Kecepatan RAM memcpy < 1 us)
     memcpy(s_active_buf + s_active_offset, record, record_len);
     s_active_offset += record_len;
     s_active_record_count++;
 
-    // Lepas mutex dan return secepat kilat
     xSemaphoreGive(s_log_mutex);
     return ESP_OK;
 }

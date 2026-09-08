@@ -28,6 +28,9 @@
 #pragma GCC diagnostic ignored "-Wcpp"
 #include "driver/twai.h"
 #pragma GCC diagnostic pop
+#include "esp_now.h"
+#include "esp_mac.h"
+#include "ota_update.h"
 
 static const char *TAG = "COM_TEMPLATES";
 
@@ -188,7 +191,17 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     } 
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-        ESP_LOGI(TAG_WIFI, ">>> SUKSES TERHUBUNG! IP Address: " IPSTR " <<<", IP2STR(&event->ip_info.ip));
+        ESP_LOGI(TAG_WIFI, "==================================================");
+        ESP_LOGI(TAG_WIFI, ">>> SUKSES TERHUBUNG KE WIFI! <<<");
+        ESP_LOGI(TAG_WIFI, ">>> IP Address : " IPSTR, IP2STR(&event->ip_info.ip));
+        ESP_LOGI(TAG_WIFI, ">>> Netmask    : " IPSTR, IP2STR(&event->ip_info.netmask));
+        ESP_LOGI(TAG_WIFI, ">>> Gateway    : " IPSTR, IP2STR(&event->ip_info.gw));
+        ESP_LOGI(TAG_WIFI, "==================================================");
+
+        // Otomatis aktifkan Web Server OTA Firmware Update
+        ota_update_init();
+        ESP_LOGI(TAG_WIFI, ">>> OTA Web UI Aktif: http://" IPSTR "/update <<<", IP2STR(&event->ip_info.ip));
+        ESP_LOGI(TAG_WIFI, "==================================================");
     }
 }
 
@@ -226,14 +239,19 @@ esp_err_t com_tmpl_wifi_http_init(const char *ssid, const char *pass) {
 
     wifi_config_t wifi_config = {
         .sta = {
-            .scan_method = WIFI_ALL_CHANNEL_SCAN,
+            .scan_method = WIFI_FAST_SCAN,
             .sort_method = WIFI_CONNECT_AP_BY_SIGNAL,
-            .threshold.authmode = WIFI_AUTH_OPEN,
+            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+            .pmf_cfg = {
+                .capable = true,
+                .required = false
+            },
         },
     };
     strncpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
     strncpy((char *)wifi_config.sta.password, pass, sizeof(wifi_config.sta.password));
 
+    esp_wifi_set_storage(WIFI_STORAGE_RAM);
     esp_wifi_set_mode(WIFI_MODE_STA);
     esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
     esp_wifi_start();
@@ -433,22 +451,209 @@ void com_tmpl_ble_on_characteristic_write(const uint8_t *data, size_t len) {
 }
 
 /* =========================================================================
+ * 8. TEMPLATE ESP-NOW (Two-Way Peer-to-Peer & Broadcast 2.4GHz)
+ * ========================================================================= */
+
+static const uint8_t s_espnow_broadcast_mac[ESP_NOW_ETH_ALEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+static uint8_t s_espnow_target_mac[ESP_NOW_ETH_ALEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+static bool s_espnow_initialized = false;
+
+/**
+ * @brief  Callback status pengiriman paket ESP-NOW (TX Callback).
+ * @param  tx_info Informasi pengiriman paket (MAC tujuan, dsb).
+ * @param  status Status pengiriman (ESP_NOW_SEND_SUCCESS / ESP_NOW_SEND_FAIL).
+ * @retval None
+ */
+static void espnow_send_cb(const esp_now_send_info_t *tx_info, esp_now_send_status_t status) {
+    if (status == ESP_NOW_SEND_SUCCESS) {
+        if (tx_info && tx_info->des_addr) {
+            ESP_LOGD(TAG, "[ESP-NOW TX] Paket berhasil terkirim ke " MACSTR, MAC2STR(tx_info->des_addr));
+        } else {
+            ESP_LOGD(TAG, "[ESP-NOW TX] Paket berhasil terkirim.");
+        }
+    } else {
+        if (tx_info && tx_info->des_addr) {
+            ESP_LOGW(TAG, "[ESP-NOW TX] Gagal mengirim paket ke " MACSTR, MAC2STR(tx_info->des_addr));
+        } else {
+            ESP_LOGW(TAG, "[ESP-NOW TX] Gagal mengirim paket.");
+        }
+    }
+}
+
+/**
+ * @brief  Callback penerimaan data paket ESP-NOW dari driver hardware (RX Callback).
+ * @param  recv_info Informasi pengirim paket (MAC, RSSI, dsb).
+ * @param  data Pointer data payload yang diterima.
+ * @param  len Panjang payload dalam bytes.
+ * @retval None
+ */
+static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
+    if (recv_info == NULL || data == NULL || len <= 0) {
+        return;
+    }
+
+    // Simpan MAC pengirim terakhir sebagai default target reply (Two-Way auto-reply)
+    memcpy(s_espnow_target_mac, recv_info->src_addr, ESP_NOW_ETH_ALEN);
+
+    com_tmpl_espnow_on_recv(recv_info->src_addr, data, len);
+}
+
+/**
+ * @brief  Inisialisasi stack ESP-NOW 2-Way communication (Master/Slave).
+ * @param  peer_mac Alamat 6-byte MAC target peer (atau NULL untuk broadcast FF:FF:FF:FF:FF:FF).
+ * @param  channel Channel Wi-Fi operasi (1 - 13, default 1).
+ * @retval ESP_OK jika inisialisasi ESP-NOW berhasil, atau esp_err_t jika gagal.
+ */
+esp_err_t com_tmpl_espnow_init(const uint8_t *peer_mac, uint8_t channel) {
+    if (s_espnow_initialized) {
+        ESP_LOGW(TAG, "[ESP-NOW] Sudah diinisialisasi sebelumnya.");
+        return ESP_OK;
+    }
+
+    // Inisialisasi NVS jika belum
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        nvs_flash_erase();
+        nvs_flash_init();
+    }
+
+    // Inisialisasi Netif & Event loop jika belum aktif
+    esp_netif_init();
+    esp_event_loop_create_default();
+
+    // Inisialisasi Wi-Fi STA mode jika belum aktif
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    esp_wifi_init(&cfg);
+    esp_wifi_set_storage(WIFI_STORAGE_RAM);
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    esp_wifi_start();
+
+    // Inisialisasi protokol ESP-NOW
+    ret = esp_now_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "[ESP-NOW] Gagal inisialisasi ESP-NOW! Error: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    // Daftarkan callbacks
+    esp_now_register_send_cb(espnow_send_cb);
+    esp_now_register_recv_cb(espnow_recv_cb);
+
+    // Tentukan target MAC (Peer spesifik atau Broadcast)
+    const uint8_t *target = (peer_mac != NULL) ? peer_mac : s_espnow_broadcast_mac;
+    memcpy(s_espnow_target_mac, target, ESP_NOW_ETH_ALEN);
+
+    // Daftarkan target peer
+    ret = com_tmpl_espnow_add_peer(target, channel, false);
+    if (ret != ESP_OK && ret != ESP_ERR_ESPNOW_EXIST) {
+        ESP_LOGE(TAG, "[ESP-NOW] Gagal mendaftarkan peer default!");
+        return ret;
+    }
+
+    s_espnow_initialized = true;
+    ESP_LOGI(TAG, "[ESP-NOW] Inisialisasi sukses! Target MAC: " MACSTR " | Channel: %u",
+             MAC2STR(s_espnow_target_mac), (channel == 0) ? 1 : channel);
+
+    return ESP_OK;
+}
+
+/**
+ * @brief  Menambahkan peer baru ke daftar komunikasi ESP-NOW secara dinamis.
+ * @param  peer_mac Alamat 6-byte MAC target.
+ * @param  channel Channel Wi-Fi target.
+ * @param  encrypt Status enkripsi paket (true / false).
+ * @retval ESP_OK jika peer berhasil ditambahkan, atau esp_err_t jika gagal.
+ */
+esp_err_t com_tmpl_espnow_add_peer(const uint8_t *peer_mac, uint8_t channel, bool encrypt) {
+    if (peer_mac == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (esp_now_is_peer_exist(peer_mac)) {
+        return ESP_OK;
+    }
+
+    esp_now_peer_info_t peer_info = {0};
+    memcpy(peer_info.peer_addr, peer_mac, ESP_NOW_ETH_ALEN);
+    peer_info.channel = (channel == 0) ? 1 : channel;
+    peer_info.ifidx = WIFI_IF_STA;
+    peer_info.encrypt = encrypt;
+
+    esp_err_t ret = esp_now_add_peer(&peer_info);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "[ESP-NOW] Gagal menambahkan peer " MACSTR " (Error: %s)",
+                 MAC2STR(peer_mac), esp_err_to_name(ret));
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "[ESP-NOW] Peer " MACSTR " berhasil didaftarkan (Channel %u)",
+             MAC2STR(peer_mac), peer_info.channel);
+    return ESP_OK;
+}
+
+/**
+ * @brief  Mengirimkan paket data biner melalui gelombang radio ESP-NOW (TX Handler).
+ * @param  data Pointer ke buffer data yang akan dikirimkan (maksimal 250 bytes).
+ * @param  len Panjang data yang akan dikirim dalam bytes.
+ * @retval ESP_OK jika paket berhasil dikirim ke antrean radio, atau esp_err_t jika gagal.
+ */
+esp_err_t com_tmpl_espnow_send(const void *data, size_t len) {
+    if (data == NULL || len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!s_espnow_initialized) {
+        ESP_LOGW(TAG, "[ESP-NOW TX] ESP-NOW belum diinisialisasi!");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    size_t send_len = (len > ESP_NOW_MAX_DATA_LEN) ? ESP_NOW_MAX_DATA_LEN : len;
+    esp_err_t ret = esp_now_send(s_espnow_target_mac, (const uint8_t *)data, send_len);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "[ESP-NOW TX] Gagal kirim %u bytes ke " MACSTR " (Error: %s)",
+                 (unsigned int)send_len, MAC2STR(s_espnow_target_mac), esp_err_to_name(ret));
+        return ret;
+    }
+
+    return ESP_OK;
+}
+
+/**
+ * @brief  Callback penerimaan data masuk ESP-NOW dari perangkat peer/master lain ke Com Hub.
+ * @param  src_mac Pointer ke alamat MAC pengirim paket (6 bytes).
+ * @param  data Pointer ke payload data yang diterima.
+ * @param  len Panjang data payload dalam bytes.
+ * @retval None
+ */
+void com_tmpl_espnow_on_recv(const uint8_t *src_mac, const uint8_t *data, int len) {
+    if (data == NULL || len <= 0) return;
+
+    // Pastikan MAC pengirim terdaftar sebagai peer agar ESP32 bisa membalas otomatis (Two-Way)
+    if (src_mac != NULL && !esp_now_is_peer_exist(src_mac)) {
+        com_tmpl_espnow_add_peer(src_mac, 1, false);
+    }
+
+    com_push_incoming_request(COM_IF_ESPNOW, data, (size_t)len);
+}
+
+/* =========================================================================
  * MASTER REGISTRATION HELPER
  * ========================================================================= */
 
 /**
- * @brief  Mendaftarkan seluruh callback pengiriman data (TX Handlers) dari 7 protokol ke Com Hub.
+ * @brief  Mendaftarkan seluruh callback pengiriman data (TX Handlers) dari 8 protokol ke Com Hub.
  * @param  None
  * @retval None
  */
 void com_templates_register_all_handlers(void) {
- //   com_register_tx_handler(COM_IF_UART, com_tmpl_uart_send);
-//    com_register_tx_handler(COM_IF_MODBUS, com_tmpl_modbus_send_response);
-//    com_register_tx_handler(COM_IF_LORA, com_tmpl_lora_send_packet);
-//    com_register_tx_handler(COM_IF_WIFI_HTTP, com_tmpl_http_send_response);
-//    com_register_tx_handler(COM_IF_MQTT, com_tmpl_mqtt_publish_response);
-//    com_register_tx_handler(COM_IF_CAN, com_tmpl_can_send_frame);
-//    com_register_tx_handler(COM_IF_BLE, com_tmpl_ble_send_notify);
+    com_register_tx_handler(COM_IF_UART, com_tmpl_uart_send);
+    com_register_tx_handler(COM_IF_MODBUS, com_tmpl_modbus_send_response);
+    com_register_tx_handler(COM_IF_LORA, com_tmpl_lora_send_packet);
+    com_register_tx_handler(COM_IF_WIFI_HTTP, com_tmpl_http_send_response);
+    com_register_tx_handler(COM_IF_MQTT, com_tmpl_mqtt_publish_response);
+    com_register_tx_handler(COM_IF_CAN, com_tmpl_can_send_frame);
+    com_register_tx_handler(COM_IF_BLE, com_tmpl_ble_send_notify);
+    com_register_tx_handler(COM_IF_ESPNOW, com_tmpl_espnow_send);
 
-    ESP_LOGI(TAG, "Seluruh 7 Communication Protocol TX Handlers berhasil didaftarkan ke Com Hub.");
+    ESP_LOGI(TAG, "Seluruh 8 Communication Protocol TX Handlers berhasil didaftarkan ke Com Hub.");
 }

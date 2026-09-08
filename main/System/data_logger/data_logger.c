@@ -34,9 +34,7 @@ static device_datalog_t Device_Datalog_buffer;
  * ========================================================================= */
 
 static const datalog_param_desc_t Logger_data[NUMBER_OF_LOGDATA] = {
-    // =====================================================
-    // ACCELEROMETER METRICS
-    // =====================================================
+
     {
         .index       = 0,
         .name        = "bias_dc_acc_x",
@@ -139,7 +137,6 @@ void Write_Datalog(void) {
     Device_Datalog_buffer.countTIMER = s_runtime_counter;
     Device_Datalog_buffer.timestamp  = (float)esp_timer_get_time() / 1000000.0f;
 
-    // 2. Mendorong record sample ke Ping-Pong buffer
     data_logger_write_record(&Device_Datalog_buffer);
 }
 
