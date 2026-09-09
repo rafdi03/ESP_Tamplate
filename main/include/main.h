@@ -15,7 +15,7 @@
 #define WIFI_SSID_DEFAULT           "Rumah Kita"
 #define WIFI_PASS_DEFAULT           "EKAGUNAPUTRA03"
 #define MQTT_BROKER_URI_DEFAULT     "mqtt://broker.emqx.io:1883" // atau broker lokal / HiveMQ
-#define MQTT_CLIENT_ID_DEFAULT      "ESP32_Node_01"
+#define MQTT_CLIENT_ID_DEFAULT      "ESP32_IMU_Device_01"
 #define MQTT_TOPIC_REQ_DEFAULT      "esp32/node1/request"
 #define MQTT_TOPIC_RESP_DEFAULT     "esp32/node1/response"
 
@@ -23,7 +23,7 @@ typedef struct {
     int sda;
     int scl;
 } bsp_i2c_pins_t;
-
+	
 typedef struct {
     int mosi;
     int miso;

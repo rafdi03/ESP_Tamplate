@@ -6,10 +6,23 @@
 #include "esp_err.h"
 #include "main.h"
 
-// Tipe data struct data IMU
+// Tipe data struct data IMU lengkap (Accel, Gyro, Suhu)
 typedef struct {
-    float accel_z;
+    float accel_x;          // Akselerasi X (dalam satuan g)
+    float accel_y;          // Akselerasi Y (dalam satuan g)
+    float accel_z;          // Akselerasi Z (dalam satuan g)
+    float gyro_x;           // Kecepatan sudut X (deg/s)
+    float gyro_y;           // Kecepatan sudut Y (deg/s)
+    float gyro_z;           // Kecepatan sudut Z (deg/s)
+    float temp_c;           // Suhu chip (°C)
+
+    int16_t raw_accel_x;
+    int16_t raw_accel_y;
     int16_t raw_accel_z;
+    int16_t raw_gyro_x;
+    int16_t raw_gyro_y;
+    int16_t raw_gyro_z;
+    int16_t raw_temp;
 } imu_data_t;
 
 #define MPU6050_DEFAULT_ADDR    0x68

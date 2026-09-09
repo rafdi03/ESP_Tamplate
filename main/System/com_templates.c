@@ -31,6 +31,7 @@
 #include "esp_now.h"
 #include "esp_mac.h"
 #include "ota_update.h"
+#include "mqtt_client.h"
 
 static const char *TAG = "COM_TEMPLATES";
 
@@ -116,9 +117,9 @@ void com_tmpl_modbus_on_rx_frame(uint8_t slave_id, modbus_function_code_t fc, ui
 
     com_inbound_req_t req = {
         .preamble = COMM_PACKET_PREAMBLE,
-        .iface_source = (uint8_t)COM_IF_MODBUS,
         .cmd_code = (fc == MODBUS_FC_READ_INPUT_REGS) ? CMD_REQ_IMU : CMD_REQ_ALL_SENSORS,
-        .payload_len = 4
+        .payload_len = 4,
+        .iface_source = (uint8_t)COM_IF_MODBUS
     };
     memcpy(&req.payload[0], &reg_addr, 2);
     memcpy(&req.payload[2], &reg_count, 2);
@@ -201,6 +202,9 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         // Otomatis aktifkan Web Server OTA Firmware Update
         ota_update_init();
         ESP_LOGI(TAG_WIFI, ">>> OTA Web UI Aktif: http://" IPSTR "/update <<<", IP2STR(&event->ip_info.ip));
+
+        // Otomatis aktifkan MQTT Client ke Broker setelah IP siap
+        com_tmpl_mqtt_init(MQTT_BROKER_URI_DEFAULT, MQTT_CLIENT_ID_DEFAULT);
         ESP_LOGI(TAG_WIFI, "==================================================");
     }
 }
@@ -279,26 +283,86 @@ esp_err_t com_tmpl_http_send_response(const void *data, size_t len) {
 void com_tmpl_http_on_endpoint_request(const char *uri, com_cmd_code_t cmd) {
     com_inbound_req_t req = {
         .preamble = COMM_PACKET_PREAMBLE,
-        .iface_source = (uint8_t)COM_IF_WIFI_HTTP,
         .cmd_code = (uint8_t)cmd,
-        .payload_len = 0
+        .payload_len = 0,
+        .iface_source = (uint8_t)COM_IF_WIFI_HTTP
     };
     req.crc16 = comm_crc16(&req, offsetof(com_inbound_req_t, crc16));
     com_push_incoming_request(COM_IF_WIFI_HTTP, &req, sizeof(req));
 }
 
 /* =========================================================================
- * 5. TEMPLATE MQTT BROKER PUB / SUB
+ * 5. TEMPLATE MQTT BROKER PUB / SUB (Real ESP-IDF Driver)
  * ========================================================================= */
+
+static esp_mqtt_client_handle_t s_mqtt_client = NULL;
+
+/**
+ * @brief Event handler internal untuk memproses event MQTT client.
+ */
+static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
+    esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
+    switch ((esp_mqtt_event_id_t)event_id) {
+    case MQTT_EVENT_CONNECTED:
+        ESP_LOGI(TAG, "==================================================");
+        ESP_LOGI(TAG, ">>> SUKSES TERHUBUNG KE BROKER MQTT (EMQX)! <<<");
+        ESP_LOGI(TAG, ">>> Subscribed ke Topik Request : %s", MQTT_TOPIC_REQ_DEFAULT);
+        ESP_LOGI(TAG, ">>> Siap publish ke Topik Response : %s", MQTT_TOPIC_RESP_DEFAULT);
+        ESP_LOGI(TAG, "==================================================");
+        esp_mqtt_client_subscribe(s_mqtt_client, MQTT_TOPIC_REQ_DEFAULT, 0);
+        break;
+    case MQTT_EVENT_DISCONNECTED:
+        ESP_LOGW(TAG, "[MQTT] Terputus dari Broker MQTT! Mencoba menghubungkan kembali...");
+        break;
+    case MQTT_EVENT_SUBSCRIBED:
+        ESP_LOGI(TAG, "[MQTT] Berhasil subscribe ke request topic (msg_id=%d)", event->msg_id);
+        break;
+    case MQTT_EVENT_DATA:
+        ESP_LOGI(TAG, "[MQTT RX] Request masuk di topik '%.*s' (%d bytes)", 
+                 event->topic_len, event->topic, event->data_len);
+        com_tmpl_mqtt_on_message_received(event->topic, (const uint8_t *)event->data, (size_t)event->data_len);
+        break;
+    case MQTT_EVENT_ERROR:
+        ESP_LOGE(TAG, "[MQTT] Terjadi error pada client MQTT!");
+        break;
+    default:
+        break;
+    }
+}
 
 /**
  * @brief  Inisialisasi client MQTT dan menghubungkan ke broker IoT secara asinkron.
- * @param  broker_uri Alamat URI broker MQTT (contoh: "mqtt://broker.hivemq.com:1883").
+ * @param  broker_uri Alamat URI broker MQTT (contoh: "mqtt://broker.emqx.io:1883").
  * @param  client_id Nama identitas unik client perangkat pada broker MQTT.
  * @retval ESP_OK jika client MQTT berhasil dibuat dan dimulai, atau esp_err_t jika gagal.
  */
 esp_err_t com_tmpl_mqtt_init(const char *broker_uri, const char *client_id) {
-    ESP_LOGI(TAG, "[MQTT Template] Connect ke broker: %s (Client: %s)", broker_uri, client_id);
+    if (s_mqtt_client != NULL) {
+        return ESP_OK; // Sudah terinisialisasi
+    }
+
+    const char *uri = (broker_uri != NULL) ? broker_uri : MQTT_BROKER_URI_DEFAULT;
+    const char *cid = (client_id != NULL) ? client_id : MQTT_CLIENT_ID_DEFAULT;
+
+    esp_mqtt_client_config_t mqtt_cfg = {
+        .broker.address.uri = uri,
+        .credentials.client_id = cid,
+    };
+
+    s_mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
+    if (s_mqtt_client == NULL) {
+        ESP_LOGE(TAG, "[MQTT] Gagal membuat instance MQTT client!");
+        return ESP_FAIL;
+    }
+
+    esp_mqtt_client_register_event(s_mqtt_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
+    esp_err_t ret = esp_mqtt_client_start(s_mqtt_client);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "[MQTT] Gagal memulai MQTT client (Error: %s)!", esp_err_to_name(ret));
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "[MQTT] Client started. Menghubungkan ke Broker: %s (Client: %s)...", uri, cid);
     return ESP_OK;
 }
 
@@ -309,7 +373,18 @@ esp_err_t com_tmpl_mqtt_init(const char *broker_uri, const char *client_id) {
  * @retval ESP_OK jika publish berhasil, atau esp_err_t jika gagal.
  */
 esp_err_t com_tmpl_mqtt_publish_response(const void *data, size_t len) {
-    ESP_LOGI(TAG, "[MQTT TX] Publish balasan ke topik 'esp32/response' (%u bytes)", (unsigned int)len);
+    if (s_mqtt_client == NULL) {
+        ESP_LOGW(TAG, "[MQTT TX] Client belum aktif / belum terhubung ke broker!");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    int msg_id = esp_mqtt_client_publish(s_mqtt_client, MQTT_TOPIC_RESP_DEFAULT, (const char *)data, len, 0, 0);
+    if (msg_id < 0) {
+        ESP_LOGE(TAG, "[MQTT TX] Gagal publish ke '%s'!", MQTT_TOPIC_RESP_DEFAULT);
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "[MQTT TX] Sukses publish (%u bytes) ke '%s'", (unsigned int)len, MQTT_TOPIC_RESP_DEFAULT);
     return ESP_OK;
 }
 
@@ -321,7 +396,6 @@ esp_err_t com_tmpl_mqtt_publish_response(const void *data, size_t len) {
  * @retval None
  */
 void com_tmpl_mqtt_on_message_received(const char *topic, const uint8_t *payload, size_t len) {
-    ESP_LOGI(TAG, "[MQTT RX] Pesan masuk di topik: %s", topic);
     com_push_incoming_request(COM_IF_MQTT, payload, len);
 }
 
@@ -391,9 +465,9 @@ esp_err_t com_tmpl_can_send_frame(const void *data, size_t len) {
 void com_tmpl_can_on_frame_received(uint32_t can_id, const uint8_t *data, uint8_t dlc) {
     com_inbound_req_t req = {
         .preamble = COMM_PACKET_PREAMBLE,
-        .iface_source = (uint8_t)COM_IF_CAN,
         .cmd_code = (uint8_t)(can_id & 0xFF),
-        .payload_len = (dlc > 32) ? 32 : dlc
+        .payload_len = (dlc > 32) ? 32 : dlc,
+        .iface_source = (uint8_t)COM_IF_CAN
     };
     if (data && dlc > 0) {
         memcpy(req.payload, data, req.payload_len);
@@ -510,40 +584,33 @@ esp_err_t com_tmpl_espnow_init(const uint8_t *peer_mac, uint8_t channel) {
         return ESP_OK;
     }
 
-    // Inisialisasi NVS jika belum
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         nvs_flash_erase();
         nvs_flash_init();
     }
 
-    // Inisialisasi Netif & Event loop jika belum aktif
     esp_netif_init();
     esp_event_loop_create_default();
 
-    // Inisialisasi Wi-Fi STA mode jika belum aktif
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     esp_wifi_init(&cfg);
     esp_wifi_set_storage(WIFI_STORAGE_RAM);
     esp_wifi_set_mode(WIFI_MODE_STA);
     esp_wifi_start();
 
-    // Inisialisasi protokol ESP-NOW
     ret = esp_now_init();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "[ESP-NOW] Gagal inisialisasi ESP-NOW! Error: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    // Daftarkan callbacks
     esp_now_register_send_cb(espnow_send_cb);
     esp_now_register_recv_cb(espnow_recv_cb);
 
-    // Tentukan target MAC (Peer spesifik atau Broadcast)
     const uint8_t *target = (peer_mac != NULL) ? peer_mac : s_espnow_broadcast_mac;
     memcpy(s_espnow_target_mac, target, ESP_NOW_ETH_ALEN);
 
-    // Daftarkan target peer
     ret = com_tmpl_espnow_add_peer(target, channel, false);
     if (ret != ESP_OK && ret != ESP_ERR_ESPNOW_EXIST) {
         ESP_LOGE(TAG, "[ESP-NOW] Gagal mendaftarkan peer default!");
@@ -628,7 +695,6 @@ esp_err_t com_tmpl_espnow_send(const void *data, size_t len) {
 void com_tmpl_espnow_on_recv(const uint8_t *src_mac, const uint8_t *data, int len) {
     if (data == NULL || len <= 0) return;
 
-    // Pastikan MAC pengirim terdaftar sebagai peer agar ESP32 bisa membalas otomatis (Two-Way)
     if (src_mac != NULL && !esp_now_is_peer_exist(src_mac)) {
         com_tmpl_espnow_add_peer(src_mac, 1, false);
     }

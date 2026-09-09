@@ -20,6 +20,7 @@
 #include "esp_intr_alloc.h"
 #include "esp_attr.h"
 #include "data_logger.h"
+#include "IoT_Response.h"
 
 static const char *TAG __attribute__((unused)) = "TASK_JOBS";
 
@@ -38,10 +39,12 @@ void execute_int_callback(void) {
 
 void startup_application(void) {
     com_init(); 
-    com_templates_register_all_handlers(); 
+    input_init();
+    iot_response_init();
 //	data_logger_init();
-	com_tmpl_wifi_http_init(WIFI_SSID_DEFAULT, WIFI_PASS_DEFAULT);
-//	com_tmpl_mqtt_init(MQTT_BROKER_URI_DEFAULT, MQTT_CLIENT_ID_DEFAULT);
+    com_templates_register_all_handlers(); 
+    com_tmpl_wifi_http_init(WIFI_SSID_DEFAULT, WIFI_PASS_DEFAULT);
+    com_tmpl_mqtt_init(MQTT_BROKER_URI_DEFAULT, MQTT_CLIENT_ID_DEFAULT);
 }
 
 void job_1ms(void) {
@@ -54,7 +57,8 @@ void job_5ms(void) {
 }
 
 void job_10ms(void) {
-
+    // Membaca data 6-DOF IMU MPU6050 setiap 10ms (100 Hz ODR)
+    imu_mpu_update();
 }
 
 void job_15ms(void) {
@@ -133,3 +137,7 @@ void init_interrupt_level_4_5(gpio_num_t gpio_pin) {
                    isr_level_4_5_handler, NULL, NULL);
 }
 #endif
+
+void input_init(){
+	imu_mpu_init(NULL);
+}
