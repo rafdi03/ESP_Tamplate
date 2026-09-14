@@ -60,10 +60,10 @@
 #define MODBUS_TCP_PORT                 502
 
 /* Jumlah register Holding Register yang digunakan */
-#define MODBUS_HOLDING_REG_COUNT        5
+#define MODBUS_HOLDING_REG_COUNT        10
 
 /* Timeout koneksi dan terima data per Slave dalam milidetik */
-#define MODBUS_CONNECT_TIMEOUT_MS       500
+#define MODBUS_CONNECT_TIMEOUT_MS       200
 
 /* Interval antar siklus polling semua slave (ms) */
 #define MODBUS_POLL_INTERVAL_MS         1000
@@ -72,7 +72,7 @@
 #define MODBUS_INTER_SLAVE_DELAY_MS     50
 
 /* Jumlah maksimum Slave yang bisa di-polling (Mode MASTER) */
-#define MODBUS_MAX_SLAVES               8
+#define MODBUS_MAX_SLAVES               16
 
 
 /* =========================================================================
@@ -80,13 +80,18 @@
  * -- Sesuaikan nama field dengan data sensor Anda
  * ========================================================================= */
 
-typedef struct {
-    uint16_t sensor_1;      /* Holding Register 40001 - address 0 */
-    uint16_t sensor_2;      /* Holding Register 40002 - address 1 */
-    uint16_t sensor_3;      /* Holding Register 40003 - address 2 */
-    uint16_t sensor_4;      /* Holding Register 40004 - address 3 */
-    uint16_t sensor_5;      /* Holding Register 40005 - address 4 */
-} holding_reg_params_t;
+ typedef struct {
+     uint16_t sensor_1;
+     uint16_t sensor_2;
+     uint16_t sensor_3;
+     uint16_t sensor_4;
+     uint16_t sensor_5;
+     uint16_t sensor_6;
+     uint16_t sensor_7;
+     uint16_t sensor_8;
+     uint16_t sensor_9;
+     uint16_t sensor_10;
+ } holding_reg_params_t;
 
 
 /* =========================================================================

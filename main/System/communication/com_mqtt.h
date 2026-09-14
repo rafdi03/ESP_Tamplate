@@ -28,6 +28,7 @@
 #include "lwip/sockets.h"
 #include "lwip/netdb.h"
 #include <string.h>
+#include <stdlib.h> 
 
 #ifdef __cplusplus
 extern "C" {
