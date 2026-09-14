@@ -6,28 +6,7 @@
  */
 
 #include "task.h"
-#include "esp_log.h"
-#include <stddef.h>
-#include <stdint.h>
-#include "main.h"
-#include "LCD.h"
-#include "IMU_MPU.h"
-#include "ringbuff_com.h"
-#include "COM.h"
-#include "com_wifi.h"
-#include "com_mqtt.h"
-#include "com_ota.h"
-#include "com_modbus_tcp.h"
-#include "com_espnow.h"
-#include "com_can.h"
-#include "com_lora.h"
-#include "com_uart.h"
-#include "esp_timer.h"
-#include "driver/gpio.h"
-#include "esp_intr_alloc.h"
-#include "esp_attr.h"
-#include "data_logger.h"
-#include "IoT_Response.h"
+
 
 static const char *TAG __attribute__((unused)) = "TASK_JOBS";
 
@@ -50,7 +29,6 @@ void startup_application(void) {
     iot_response_init();
 //	data_logger_init();
 
-    // Jalankan WiFi Station (Otomatis memulai OTA Web Server & MQTT Client saat terhubung)
     com_wifi_init(WIFI_SSID_DEFAULT, WIFI_PASS_DEFAULT);
 }
 
@@ -64,8 +42,7 @@ void job_5ms(void) {
 }
 
 void job_10ms(void) {
-    // Membaca data 6-DOF IMU MPU6050 setiap 10ms (100 Hz ODR)
-    imu_mpu_update();
+    //imu_mpu_update();
 }
 
 void job_15ms(void) {
@@ -99,6 +76,16 @@ void job_500ms(void) {
 
 void job_1000ms(void) {
     ringbuf_com_print_stats();
+	
+	holding_reg_params_t slave_data;
+	    for (uint8_t i = 0; i < 4; i++) {
+	        if (com_modbus_get_slave_data(i, &slave_data)) {
+	            ESP_LOGI("TASK_JOBS", "Modbus Device %d Online | Sensor 1: %d, Sensor 2: %d", 
+	                     i + 1, slave_data.sensor_1, slave_data.sensor_2);
+	        } else {
+	            ESP_LOGW("TASK_JOBS", "Modbus Device %d Offline/Gangguan!", i + 1);
+	        }
+	    }
 }
 
 

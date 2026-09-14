@@ -22,6 +22,7 @@
 // Deklarasi forward untuk modul komunikasi yang diaktifkan setelah ada koneksi IP
 #include "com_ota.h"
 #include "com_mqtt.h"
+#include "com_modbus_tcp.h"
 
 static const char *TAG = "COM_WIFI";
 static bool s_wifi_connected = false;
@@ -54,6 +55,29 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 
         // 2. Otomatis aktifkan koneksi MQTT Client ke Broker (EMQX)
         com_mqtt_init(MQTT_BROKER_URI_DEFAULT, MQTT_CLIENT_ID_DEFAULT);
+
+        // 3. Modbus TCP Master - Polling ke Slave perangkat lapangan
+        //
+        //    Cara mendefinisikan Slave yang ingin di-poll:
+        //      { "Nama Device",  "IP Slave",     PORT,  Slave_ID, Start_Addr, Reg_Count, {0}, false }
+        //
+        //    - Nama Device : label bebas untuk logging di Serial Monitor
+        //    - IP Slave    : IP address perangkat Slave di jaringan yang sama
+        //    - PORT        : Port TCP (standar Modbus = 502)
+        //    - Slave_ID    : Unit ID Modbus Slave (1-247, lihat konfigurasi PLC/device)
+        //    - Start_Addr  : Alamat register pertama yang dibaca (0 = register 40001)
+        //    - Reg_Count   : Jumlah register yang dibaca
+        //
+        static modbus_slave_node_t slaves[] = {
+            /* { "Nama",        "IP",             PORT,  ID, Start, Count, Data,  Online } */
+            { "DEVICE_01",  "192.168.1.2", 502,   1,  0,     5,    {0}, false },
+            { "DEVICE_02",  "192.168.1.2", 502,   2,  0,     5,    {0}, false },
+            { "DEVICE_03",  "192.168.1.2", 502,   3,  0,     5,    {0}, false },
+            { "DEVICE_04",  "192.168.1.2", 502,   4,  0,     5,    {0}, false },
+            /* Tambahkan baris baru di sini untuk device ke-5, ke-6, dst.      */
+        };
+        com_modbus_master_init(slaves, sizeof(slaves) / sizeof(slaves[0]));
+
         ESP_LOGI(TAG, "==================================================");
     }
 }

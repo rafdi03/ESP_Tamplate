@@ -14,17 +14,15 @@
 
 #define WIFI_SSID_DEFAULT           "Rumah Kita"
 #define WIFI_PASS_DEFAULT           "EKAGUNAPUTRA03"
-#define MQTT_BROKER_URI_DEFAULT     "mqtt://broker.emqx.io:1883" // atau broker lokal / HiveMQ
+#define MQTT_BROKER_URI_DEFAULT     "mqtt://broker.emqx.io:1883" 
 #define MQTT_CLIENT_ID_DEFAULT      "ESP32_IMU_Device_01"
 #define MQTT_TOPIC_REQ_DEFAULT      "esp32/node1/request"
 #define MQTT_TOPIC_RESP_DEFAULT     "esp32/node1/response"
 
-// ============================================================================
-// PUSAT KONFIGURASI KECEPATAN KOMUNIKASI MAKSIMUM (ESP32-WROOM-32U HARDWARE LIMITS)
-// ============================================================================
-#define I2C_SPEED_STANDARD          100000   // 100 kHz (Standard Mode - kabel panjang/breadboard)
-#define I2C_SPEED_FAST              400000   // 400 kHz (Fast Mode - Kecepatan Maksimum MPU6050 & LCD)
-#define I2C_SPEED_FAST_PLUS         1000000  // 1 MHz   (Fast Mode Plus - ESP32 Hardware Maximum)
+
+#define I2C_SPEED_STANDARD          100000   
+#define I2C_SPEED_FAST              400000   
+#define I2C_SPEED_FAST_PLUS         1000000 
 
 // Preset Kecepatan Tertinggi: 400 kHz Fast Mode
 #define I2C_SPEED_IMU_DEFAULT       I2C_SPEED_FAST
