@@ -14,6 +14,20 @@
 #include "esp_err.h"
 #include <stddef.h>
 #include <stdbool.h>
+#include "esp_timer.h"
+#include "com_modbus_tcp.h"
+#include <string.h>
+#include "COM.h"
+#include "main.h"
+#include "mqtt_client.h"
+#include "esp_log.h"
+#include "COM.h"
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "lwip/sockets.h"
+#include "lwip/netdb.h"
+#include <string.h>
 
 #ifdef __cplusplus
 extern "C" {

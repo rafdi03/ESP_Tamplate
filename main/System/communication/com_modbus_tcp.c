@@ -9,13 +9,7 @@
  */
 
 #include "com_modbus_tcp.h"
-#include "COM.h"
-#include "esp_log.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "lwip/sockets.h"
-#include "lwip/netdb.h"
-#include <string.h>
+
 
 static const char *TAG = "MODBUS_TCP";
 
@@ -106,7 +100,6 @@ static void build_read_regs_request(uint8_t *frame, uint16_t transaction_id,
  * ========================================================================= */
 #if MODBUS_MODE == MODBUS_MODE_MASTER
 
-/* Polling satu slave, return true jika berhasil */
 static bool poll_one_slave(modbus_slave_node_t *node, uint16_t tx_id) {
     int sock = create_tcp_socket_with_timeout();
     if (sock < 0) {
@@ -114,21 +107,17 @@ static bool poll_one_slave(modbus_slave_node_t *node, uint16_t tx_id) {
         return false;
     }
 
-    /* Setup alamat tujuan */
     struct sockaddr_in dest_addr;
     dest_addr.sin_family = AF_INET;
     dest_addr.sin_port   = htons(node->port);
     inet_pton(AF_INET, node->ip, &dest_addr.sin_addr);
 
-    /* Coba koneksi */
     if (connect(sock, (struct sockaddr *)&dest_addr, sizeof(dest_addr)) != 0) {
         close(sock);
         node->is_online = false;
-        ESP_LOGW(TAG, "[%s | %s] Offline / tidak dapat dihubungi.", node->name, node->ip);
         return false;
     }
 
-    /* Kirim request FC 0x03 */
     uint8_t request[12];
     build_read_regs_request(request, tx_id, node->slave_id,
                             node->start_address, node->reg_count);
@@ -139,39 +128,23 @@ static bool poll_one_slave(modbus_slave_node_t *node, uint16_t tx_id) {
         return false;
     }
 
-    /* Terima respons */
     uint8_t response[128];
     int len = recv(sock, response, sizeof(response), 0);
     close(sock);
 
-    /* Validasi respons: panjang minimal = 9 header + (reg_count * 2 byte) */
     int expected_len = 9 + (node->reg_count * 2);
     if (len < expected_len || response[7] != 0x03) {
-
         node->is_online = false;
-        ESP_LOGW(TAG, "[%s] Respons tidak valid (len=%d)", node->name, len);
         return false;
     }
 
-    /* Parsing ke struct holding_reg_params_t */
     parse_response_to_struct(response, node->reg_count, &node->data);
     node->is_online = true;
-
-    ESP_LOGI(TAG, "[%s | %s] S1=%.1f | S2=%.1f | S3=%.1f | S4=%.1f | S5=%.1f",
-             node->name, node->ip,
-             node->data.sensor_1 / 10.0f,
-             node->data.sensor_2 / 10.0f,
-             node->data.sensor_3 / 10.0f,
-             node->data.sensor_4 / 10.0f,
-             node->data.sensor_5 / 10.0f);
-
     return true;
 }
 
 static void modbus_master_task(void *pvParameters) {
     uint16_t tx_counter = 0;
-    ESP_LOGI(TAG, "Master Poller aktif. Menargetkan %d slave.", s_num_slaves);
-
     while (1) {
         for (int i = 0; i < s_num_slaves; i++) {
             poll_one_slave(&s_slaves_ptr[i], ++tx_counter);
@@ -182,15 +155,11 @@ static void modbus_master_task(void *pvParameters) {
 }
 
 esp_err_t com_modbus_master_init(modbus_slave_node_t *slaves, uint8_t num_slaves) {
-    if (slaves == NULL || num_slaves == 0) {
-        return ESP_ERR_INVALID_ARG;
-    }
+    if (slaves == NULL || num_slaves == 0) return ESP_ERR_INVALID_ARG;
     s_slaves_ptr = slaves;
     s_num_slaves = (num_slaves > MODBUS_MAX_SLAVES) ? MODBUS_MAX_SLAVES : num_slaves;
 
     xTaskCreate(modbus_master_task, "modbus_master", 4096, NULL, 5, NULL);
-    ESP_LOGI(TAG, "Modbus TCP MASTER Aktif. Polling %d slave setiap %d ms.",
-             s_num_slaves, MODBUS_POLL_INTERVAL_MS);
     return ESP_OK;
 }
 
@@ -206,9 +175,10 @@ bool com_modbus_is_slave_online(uint8_t slave_idx) {
 }
 
 esp_err_t com_modbus_slave_init(uint8_t slave_id) {
-    ESP_LOGW(TAG, "com_modbus_slave_init() dipanggil, tapi mode aktif adalah MASTER. Diabaikan.");
+    (void)slave_id;
     return ESP_OK;
 }
+
 void com_modbus_set_holding_regs(const holding_reg_params_t *regs) { (void)regs; }
 holding_reg_params_t com_modbus_get_holding_regs(void) { return s_holding_regs; }
 

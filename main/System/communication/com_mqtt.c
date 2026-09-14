@@ -8,11 +8,6 @@
  */
 
 #include "com_mqtt.h"
-#include "COM.h"
-#include "main.h"
-#include "mqtt_client.h"
-#include "esp_log.h"
-#include <string.h>
 
 static const char *TAG = "COM_MQTT";
 static esp_mqtt_client_handle_t s_mqtt_client = NULL;
@@ -62,6 +57,7 @@ esp_err_t com_mqtt_init(const char *broker_uri, const char *client_id) {
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = uri,
         .credentials.client_id = cid,
+		.session.keepalive = 60,
     };
 
     s_mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
@@ -100,6 +96,47 @@ esp_err_t com_mqtt_publish(const void *data, size_t len) {
     return ESP_OK;
 }
 
+void send_mqtt_json(void) {
+    if (!com_mqtt_is_connected()) return;
+
+    holding_reg_params_t slave_data;
+    char json_buffer[512];
+    int offset = snprintf(json_buffer, sizeof(json_buffer),
+                          "{\"ts\":%lu,\"src\":\"periodic\",\"devices\":[",
+                          (unsigned long)esp_timer_get_time());
+
+    uint8_t online_count = 0;
+
+    for (uint8_t i = 0; i < 4; i++) {
+        if (com_modbus_get_slave_data(i, &slave_data)) {
+            if (online_count > 0) {
+                offset += snprintf(json_buffer + offset,
+                                   sizeof(json_buffer) - offset, ",");
+            }
+            offset += snprintf(json_buffer + offset,
+                               sizeof(json_buffer) - offset,
+                     "{\"id\":\"DEVICE_%02d\",\"s1\":%d,\"s2\":%d,\"s3\":%d,\"s4\":%d,\"s5\":%d}",
+                     i + 1,
+                     slave_data.sensor_1, slave_data.sensor_2,
+                     slave_data.sensor_3, slave_data.sensor_4,
+                     slave_data.sensor_5);
+            online_count++;
+        }
+    }
+
+    /* Tutup array + sertakan status node global */
+    offset += snprintf(json_buffer + offset, sizeof(json_buffer) - offset,
+                       "],\"online\":%d}", online_count);
+
+    /* KIRIM SELALU — bukan hanya jika online_count > 0 */
+    esp_err_t err = com_mqtt_publish(json_buffer, strlen(json_buffer));
+    if (err != ESP_OK) {
+        ESP_LOGE("COM_MQTT", "Gagal periodik publish: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI("COM_MQTT", "Periodic publish OK (%d device online)",
+                 online_count);
+    }
+}
 bool com_mqtt_is_connected(void) {
     return s_mqtt_connected;
 }

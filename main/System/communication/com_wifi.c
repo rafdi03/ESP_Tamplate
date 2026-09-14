@@ -70,10 +70,10 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         //
         static modbus_slave_node_t slaves[] = {
             /* { "Nama",        "IP",             PORT,  ID, Start, Count, Data,  Online } */
-            { "DEVICE_01",  "192.168.1.2", 502,   1,  0,     5,    {0}, false },
-            { "DEVICE_02",  "192.168.1.2", 502,   2,  0,     5,    {0}, false },
-            { "DEVICE_03",  "192.168.1.2", 502,   3,  0,     5,    {0}, false },
-            { "DEVICE_04",  "192.168.1.2", 502,   4,  0,     5,    {0}, false },
+            { "DEVICE_01",  "192.168.1.8", 502,   1,  0,     5,    {0}, false },
+            { "DEVICE_02",  "192.168.1.8", 502,   2,  0,     5,    {0}, false },
+            { "DEVICE_03",  "192.168.1.8", 502,   3,  0,     5,    {0}, false },
+            { "DEVICE_04",  "192.168.1.8", 502,   4,  0,     5,    {0}, false },
             /* Tambahkan baris baru di sini untuk device ke-5, ke-6, dst.      */
         };
         com_modbus_master_init(slaves, sizeof(slaves) / sizeof(slaves[0]));
@@ -81,7 +81,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "==================================================");
     }
 }
-
 esp_err_t com_wifi_init(const char *ssid, const char *pass) {
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {

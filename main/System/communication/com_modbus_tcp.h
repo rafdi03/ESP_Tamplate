@@ -42,7 +42,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
-
+#include "com_mqtt.h"
 
 /* =========================================================================
  * [KONFIGURASI UTAMA] -- EDIT BAGIAN INI SESUAI KEBUTUHAN ANDA
@@ -143,6 +143,7 @@ esp_err_t com_modbus_master_init(modbus_slave_node_t *slaves, uint8_t num_slaves
  *   }
  */
 bool com_modbus_get_slave_data(uint8_t slave_idx, holding_reg_params_t *out_data);
+void send_mqtt_json(void);
 
 /**
  * @brief Cek apakah Slave tertentu sedang online.

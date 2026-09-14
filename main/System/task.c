@@ -76,15 +76,10 @@ void job_500ms(void) {
 
 void job_1000ms(void) {
     ringbuf_com_print_stats();
-	
-	holding_reg_params_t slave_data;
-	    for (uint8_t i = 0; i < 4; i++) {
-	        if (com_modbus_get_slave_data(i, &slave_data)) {
-	            ESP_LOGI("TASK_JOBS", "Modbus Device %d Online | Sensor 1: %d, Sensor 2: %d", 
-	                     i + 1, slave_data.sensor_1, slave_data.sensor_2);
-	        } else {
-	            ESP_LOGW("TASK_JOBS", "Modbus Device %d Offline/Gangguan!", i + 1);
-	        }
+	static uint16_t tick = 0;
+	    if (++tick >= 10) {         
+	        tick = 0;
+	        send_mqtt_json();       
 	    }
 }
 
