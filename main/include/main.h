@@ -19,6 +19,21 @@
 #define MQTT_TOPIC_REQ_DEFAULT      "esp32/node1/request"
 #define MQTT_TOPIC_RESP_DEFAULT     "esp32/node1/response"
 
+// ============================================================================
+// PUSAT KONFIGURASI KECEPATAN KOMUNIKASI MAKSIMUM (ESP32-WROOM-32U HARDWARE LIMITS)
+// ============================================================================
+#define I2C_SPEED_STANDARD          100000   // 100 kHz (Standard Mode - kabel panjang/breadboard)
+#define I2C_SPEED_FAST              400000   // 400 kHz (Fast Mode - Kecepatan Maksimum MPU6050 & LCD)
+#define I2C_SPEED_FAST_PLUS         1000000  // 1 MHz   (Fast Mode Plus - ESP32 Hardware Maximum)
+
+// Preset Kecepatan Tertinggi: 400 kHz Fast Mode
+#define I2C_SPEED_IMU_DEFAULT       I2C_SPEED_FAST
+#define I2C_SPEED_LCD_DEFAULT       I2C_SPEED_FAST
+
+#define CAN_BAUD_RATE_MAX           1000     // 1000 kbps (1 Mbps - Maksimum TWAI Controller)
+#define UART_BAUD_RATE_MAX          921600   // 921.600 bps (Maksimum UART)
+
+
 typedef struct {
     int sda;
     int scl;

@@ -13,8 +13,15 @@
 #include "LCD.h"
 #include "IMU_MPU.h"
 #include "ringbuff_com.h"
-#include "Com.h"
-#include "com_templates.h"
+#include "COM.h"
+#include "com_wifi.h"
+#include "com_mqtt.h"
+#include "com_ota.h"
+#include "com_modbus_tcp.h"
+#include "com_espnow.h"
+#include "com_can.h"
+#include "com_lora.h"
+#include "com_uart.h"
 #include "esp_timer.h"
 #include "driver/gpio.h"
 #include "esp_intr_alloc.h"
@@ -42,14 +49,14 @@ void startup_application(void) {
     input_init();
     iot_response_init();
 //	data_logger_init();
-    com_templates_register_all_handlers(); 
-    com_tmpl_wifi_http_init(WIFI_SSID_DEFAULT, WIFI_PASS_DEFAULT);
-    com_tmpl_mqtt_init(MQTT_BROKER_URI_DEFAULT, MQTT_CLIENT_ID_DEFAULT);
+
+    // Jalankan WiFi Station (Otomatis memulai OTA Web Server & MQTT Client saat terhubung)
+    com_wifi_init(WIFI_SSID_DEFAULT, WIFI_PASS_DEFAULT);
 }
 
 void job_1ms(void) {
     com_update_1ms(); 
-	can_rx_poll();
+	com_can_rx_poll();
 }
 
 void job_5ms(void) {

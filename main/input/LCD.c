@@ -89,7 +89,7 @@ esp_err_t lcd_init(const lcd_config_t *config) {
     i2c_device_config_t dev_cfg = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = config->i2c_addr,
-        .scl_speed_hz = 100000,
+        .scl_speed_hz = I2C_SPEED_LCD_DEFAULT, // 400kHz Fast Mode
     };
     ret = i2c_master_bus_add_device(s_lcd_bus_handle, &dev_cfg, &s_lcd_dev_handle);
     if (ret != ESP_OK) {

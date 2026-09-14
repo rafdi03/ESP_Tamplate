@@ -1,13 +1,13 @@
 /*
- * ota_update.c
+ * com_ota.c
  *
- *  Created on: 9 Sept 2026
+ *  Created on: 14 Sept 2026
  *      Author: Rafdi
  *
  *  Deskripsi: Implementasi Web Server lokal untuk OTA Firmware Update (Browser-based).
  */
 
-#include "ota_update.h"
+#include "com_ota.h"
 #include "esp_log.h"
 #include "esp_http_server.h"
 #include "esp_ota_ops.h"
@@ -18,7 +18,7 @@
 #include "freertos/task.h"
 #include <string.h>
 
-static const char *TAG = "OTA_UPDATE";
+static const char *TAG = "COM_OTA";
 static httpd_handle_t s_httpd_server = NULL;
 
 #define OTA_BUFF_SIZE 1024
@@ -232,7 +232,7 @@ static esp_err_t ota_post_handler(httpd_req_t *req) {
  * REGISTRASI HTTP SERVER
  * ========================================================================= */
 
-esp_err_t ota_update_init(void) {
+esp_err_t com_ota_init(void) {
     if (s_httpd_server != NULL) {
         return ESP_OK; 
     }
@@ -276,7 +276,7 @@ esp_err_t ota_update_init(void) {
     return ESP_OK;
 }
 
-void ota_update_stop(void) {
+void com_ota_stop(void) {
     if (s_httpd_server != NULL) {
         httpd_stop(s_httpd_server);
         s_httpd_server = NULL;

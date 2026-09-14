@@ -52,7 +52,7 @@ esp_err_t imu_mpu_init(const imu_mpu_config_t *config) {
         i2c_device_config_t dev_cfg = {
             .dev_addr_length = I2C_ADDR_BIT_LEN_7,
             .device_address = try_addrs[i],
-            .scl_speed_hz = 100000, // 100kHz Standard Mode (Sangat stabil pada kabel jumper/breadboard)
+            .scl_speed_hz = I2C_SPEED_IMU_DEFAULT, // 400kHz Fast Mode (Maksimum Hardware MPU6050)
         };
         
         if (s_mpu_dev != NULL) {
@@ -69,6 +69,12 @@ esp_err_t imu_mpu_init(const imu_mpu_config_t *config) {
         if (ret == ESP_OK) {
             detected = true;
             active_addr = try_addrs[i];
+
+            // Konfigurasi Digital Low-Pass Filter (DLPF 42Hz) & 200Hz ODR untuk kestabilan sinyal
+            uint8_t dlpf_cmd[2] = {0x1A, 0x03};
+            i2c_master_transmit(s_mpu_dev, dlpf_cmd, sizeof(dlpf_cmd), pdMS_TO_TICKS(20));
+            uint8_t smpl_cmd[2] = {0x19, 0x04};
+            i2c_master_transmit(s_mpu_dev, smpl_cmd, sizeof(smpl_cmd), pdMS_TO_TICKS(20));
             break;
         }
     }
